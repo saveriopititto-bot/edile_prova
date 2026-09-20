@@ -7,9 +7,11 @@ Esegui con:
 Richiede il file gestionale_edile.py nella stessa cartella.
 """
 
+import os
 from datetime import date
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from gestionale_edile import (
     Cantiere,
@@ -71,8 +73,8 @@ with st.sidebar:
         st.session_state.gestionale = GestionaleEdile()
         st.rerun()
 
-tab_dashboard, tab_operai, tab_cantieri, tab_scadenze, tab_fatture = st.tabs(
-    ["📊 Dashboard", "👷 Operai", "🏠 Cantieri", "⏰ Scadenze", "🧾 Fatture"]
+tab_dashboard, tab_operai, tab_cantieri, tab_materiali, tab_scadenze, tab_fatture, tab_mobile = st.tabs(
+    ["📊 Dashboard", "👷 Operai", "🏠 Cantieri", "🧱 Materiali", "⏰ Scadenze", "🧾 Fatture", "📱 App Mobile"]
 )
 
 # ---------------------------------------------------------------------------
@@ -179,6 +181,49 @@ with tab_cantieri:
             ])
 
 # ---------------------------------------------------------------------------
+# MATERIALI ACQUISTATI
+# ---------------------------------------------------------------------------
+with tab_materiali:
+    st.subheader("Materiali Acquistati")
+
+    if gestionale.cantieri:
+        with st.form("nuovo_materiale", clear_on_submit=True):
+            st.markdown("#### Aggiungi nuovo materiale")
+            cid_m = st.selectbox(
+                "Cantiere di destinazione", options=list(gestionale.cantieri.keys()),
+                format_func=lambda cid: gestionale.cantieri[cid].nome, key="materiale_cantiere",
+            )
+            descrizione_m = st.text_input("Descrizione materiale")
+            importo_m = st.number_input("Importo (EUR)", min_value=0.0, step=10.0)
+            data_m = st.date_input("Data acquisto", value=date.today())
+            if st.form_submit_button("Registra acquisto") and descrizione_m:
+                gestionale.cantieri[cid_m].aggiungi_costo(VoceCosto(
+                    tipo=TipoCosto.MATERIALE, descrizione=descrizione_m, importo=importo_m, data=data_m,
+                ))
+                st.success(f"Acquisto registrato per il cantiere: {gestionale.cantieri[cid_m].nome}")
+
+        st.markdown("#### Elenco materiali acquistati")
+        tutti_materiali = []
+        for cid, cantiere in gestionale.cantieri.items():
+            for costo in cantiere.costi:
+                if costo.tipo == TipoCosto.MATERIALE:
+                    tutti_materiali.append({
+                        "Data": costo.data,
+                        "Cantiere": cantiere.nome,
+                        "Descrizione": costo.descrizione,
+                        "Importo (EUR)": costo.importo,
+                    })
+        
+        if tutti_materiali:
+            # Ordiniamo per data decrescente
+            tutti_materiali.sort(key=lambda x: x["Data"], reverse=True)
+            st.table(tutti_materiali)
+        else:
+            st.info("Nessun materiale registrato.")
+    else:
+        st.warning("Aggiungi prima almeno un cantiere per poter registrare i materiali.")
+
+# ---------------------------------------------------------------------------
 # SCADENZE
 # ---------------------------------------------------------------------------
 with tab_scadenze:
@@ -248,3 +293,41 @@ with tab_dashboard:
         ])
     else:
         st.info("Nessun dato ancora. Inizia aggiungendo operai e un cantiere.")
+
+# ---------------------------------------------------------------------------
+# APP MOBILE (ANTEPRIMA)
+# ---------------------------------------------------------------------------
+with tab_mobile:
+    st.subheader("Anteprima App Mobile")
+    st.markdown("Simulatore dell'interfaccia mobile (Vue.js standalone).")
+    
+    html_path = "mobile_app.html"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    full_path = os.path.join(base_dir, html_path)
+    
+    if os.path.exists(full_path):
+        with open(full_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        
+        # Mettiamo l'app in una colonna centrale per simulare la larghezza di uno smartphone
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            st.markdown(
+                """
+                <style>
+                .mobile-container {
+                    border: 12px solid #201e1d;
+                    border-radius: 36px;
+                    overflow: hidden;
+                    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+                    padding: 0;
+                    margin: 0 auto;
+                }
+                </style>
+                """, unsafe_allow_html=True
+            )
+            st.markdown('<div class="mobile-container">', unsafe_allow_html=True)
+            components.html(html_content, height=800, scrolling=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.warning(f"File {html_path} non trovato.")

@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+<title>Gestionale Edile Mobile</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<style>
+body { margin:0; background:#f3f2f2; font-family:'Archivo', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+a { color:#ec3013; text-decoration: none; }
+a:hover { color:#ae1800; }
+.active-btn:active { background: rgba(32,30,29,0.1) !important; }
+.active-btn-red:active { opacity: 0.8 !important; }
+textarea:focus { outline: none; border-color: #ec3013 !important; }
+
+/* In a real app we'd load this font: */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,100..900;1,100..900&display=swap');
+</style>
+</head>
+<body>
+<div id="app">
+    <!-- Template will be injected here by vue -->
+</div>
+
+<script>
+const { createApp, ref, computed } = Vue;
+
+const app = createApp({
+    setup() {
+        const view = ref('oggi'); // 'oggi', 'cantieri', 'cantiere', 'sal1', 'sal2', 'sal3', 'salOk', 'squadra', 'costi'
+        
+        // State Data
+        const salPct = ref(65);
+        const fattura = ref(false);
+        const nota = ref('');
+        const foto = ref([
+            { bg: '#d7d3d3', fg: '#605d5d', tag: 'SOGGIORNO', ora: '14:22' },
+            { bg: '#bab6b6', fg: '#2d2b2b', tag: 'CUCINA', ora: '14:25' }
+        ]);
+        
+        const sel = ref({
+            nome: 'Villa Rossi',
+            cliente: 'Mario Rossi',
+            indirizzo: 'Via Roma 12, Milano',
+            salTxt: '50%',
+            salPct: 50,
+            salWidth: '50%',
+            ultimoSal: '01/09/2026',
+            preventivoTxt: '€ 20.000',
+            costiTxt: '€ 1.500',
+            maturatoTxt: '€ 10.000',
+            margineTxt: '€ 8.500',
+            margineColor: '#201e1d',
+            voci: [
+                { descrizione: 'Materiale elettrico', tipo: 'Fattura', data: '10/09/2026', importoTxt: '€ 500,00' },
+                { descrizione: 'Manodopera', tipo: 'Ore', data: '12/09/2026', importoTxt: '€ 1.000,00' }
+            ]
+        });
+
+        const cantieri = ref([
+            {
+                nome: 'Villa Rossi',
+                cliente: 'Mario Rossi',
+                indirizzo: 'Via Roma 12, Milano',
+                stato: 'In corso',
+                margineTxt: '€ 8.500',
+                margineColor: '#201e1d',
+                salTxt: '50%',
+                salWidth: '50%',
+                preventivoTxt: '€ 20.000',
+                costiTxt: '€ 1.500',
+                costWidth: '7%',
+                salWidth2: '43%',
+                open: () => { view.value = 'cantiere'; sel.value = cantieri.value[0]; }
+            },
+            {
+                nome: 'Appartamento Bianchi',
+                cliente: 'Luigi Bianchi',
+                indirizzo: 'Via Verdi 4, Milano',
+                stato: 'In corso',
+                margineTxt: '€ 740',
+                margineColor: '#ae1800',
+                salTxt: '10%',
+                salWidth: '10%',
+                preventivoTxt: '€ 10.000',
+                costiTxt: '€ 260',
+                costWidth: '2%',
+                salWidth2: '8%',
+                open: () => { view.value = 'cantiere'; sel.value = cantieri.value[1]; }
+            }
+        ]);
+        
+        const lavorazioni = ref([
+            { id: 1, nome: 'Posa massetto', quota: '25% del totale', checked: true },
+            { id: 2, nome: 'Tracce idrauliche', quota: '15% del totale', checked: false }
+        ]);
+        
+        // Dynamic derived props for lavorazioni
+        lavorazioni.value.forEach(l => {
+            Object.defineProperty(l, 'mark', { get: () => l.checked ? '✓' : '' });
+            Object.defineProperty(l, 'boxBorder', { get: () => l.checked ? '#ec3013' : 'rgba(32,30,29,.4)' });
+            Object.defineProperty(l, 'boxBg', { get: () => l.checked ? '#ec3013' : 'transparent' });
+            l.toggle = () => l.checked = !l.checked;
+        });
+        
+        const operai = ref([
+            { nome: 'Mario Rossi', costoTxt: '€25/h', cantiere: 'Villa Rossi', ore: 8 },
+            { nome: 'Luigi Bianchi', costoTxt: '€25/h', cantiere: 'Villa Rossi', ore: 8 }
+        ]);
+        
+        operai.value.forEach(o => {
+            Object.defineProperty(o, 'costoGiornoTxt', { get: () => '€ ' + (o.ore * 25) + ',00' });
+            Object.defineProperty(o, 'oreTxt', { get: () => o.ore + ' h' });
+            o.dec = () => { if (o.ore > 0) o.ore--; };
+            o.inc = () => { if (o.ore < 12) o.ore++; };
+        });
+
+        const materiali = ref([
+            { nome: 'Sacco Cemento 25kg', fornitore: 'Edilfer', cantiere: 'Villa Rossi', data: '18/09/2026', quantita: '20 pz', costoTxt: '€ 120,00' },
+            { nome: 'Piastrelle Ceramica', fornitore: 'Marazzi', cantiere: 'Appartamento Bianchi', data: '16/09/2026', quantita: '50 mq', costoTxt: '€ 1.250,00' },
+            { nome: 'Tubi PVC 100mm', fornitore: 'IdroTubi', cantiere: 'Villa Rossi', data: '15/09/2026', quantita: '15 m', costoTxt: '€ 45,00' }
+        ]);
+
+        const vals = computed(() => ({
+            isOggi: view.value === 'oggi',
+            isCantieri: view.value === 'cantieri',
+            isCantiere: view.value === 'cantiere',
+            isSal1: view.value === 'sal1',
+            isSal2: view.value === 'sal2',
+            isSal3: view.value === 'sal3',
+            isSalOk: view.value === 'salOk',
+            isSquadra: view.value === 'squadra',
+            isCosti: view.value === 'costi',
+            isMateriali: view.value === 'materiali',
+            
+            // Navigation
+            goSquadra: () => { view.value = 'squadra'; window.scrollTo(0, 0); },
+            goCantieri: () => { view.value = 'cantieri'; window.scrollTo(0, 0); },
+            goCosti: () => { view.value = 'costi'; window.scrollTo(0, 0); },
+            goOggi: () => { view.value = 'oggi'; window.scrollTo(0, 0); },
+            goMateriali: () => { view.value = 'materiali'; window.scrollTo(0, 0); },
+            
+            // SAL flow
+            startSal: () => { 
+                view.value = 'sal1'; 
+                window.scrollTo(0, 0);
+                salPct.value = 65; 
+                foto.value = []; 
+                fattura.value = false;
+                nota.value = "";
+            },
+            closeSal: () => { view.value = 'cantiere'; window.scrollTo(0, 0); },
+            toSal1: () => { view.value = 'sal1'; window.scrollTo(0, 0); },
+            toSal2: () => { view.value = 'sal2'; window.scrollTo(0, 0); },
+            toSal3: () => { view.value = 'sal3'; window.scrollTo(0, 0); },
+            confirmSal: () => { 
+                sel.value.salPct = salPct.value;
+                sel.value.salTxt = salPct.value + '%';
+                sel.value.salWidth = salPct.value + '%';
+                view.value = 'salOk'; 
+                window.scrollTo(0, 0);
+            },
+            backToCantiere: () => { view.value = 'cantiere'; window.scrollTo(0, 0); },
+            
+            // Sal1 Data
+            sel: sel.value,
+            salPct: salPct.value,
+            salWidth: salPct.value + '%',
+            decSal: () => { if (salPct.value > 0) salPct.value -= 5; },
+            incSal: () => { if (salPct.value < 100) salPct.value += 5; },
+            salChips: [
+                { label: '50%', bg: '#eae9e9', fg: '#201e1d', set: () => salPct.value = 50 },
+                { label: '65%', bg: '#eae9e9', fg: '#201e1d', set: () => salPct.value = 65 },
+                { label: '80%', bg: '#eae9e9', fg: '#201e1d', set: () => salPct.value = 80 },
+                { label: '100%', bg: '#eae9e9', fg: '#201e1d', set: () => salPct.value = 100 },
+            ],
+            lavorazioni: lavorazioni.value,
+            
+            // Sal2 Data
+            addFoto: () => {
+                const now = new Date();
+                const h = String(now.getHours()).padStart(2, '0');
+                const m = String(now.getMinutes()).padStart(2, '0');
+                foto.value.push({ bg: '#d7d3d3', fg: '#605d5d', tag: 'NUOVA', ora: `${h}:${m}` });
+            },
+            fotoCount: foto.value.length,
+            fotoStato: foto.value.length > 0 ? 'Salvate sul cloud' : 'Nessuna foto',
+            foto: foto.value,
+            
+            // Sal3 Data
+            nuovoMaturatoTxt: '€ 13.000',
+            nuovoMargineTxt: '€ 11.500',
+            nuovoMargineColor: '#201e1d',
+            lavCount: lavorazioni.value.filter(l => l.checked).length,
+            fatturaBorder: fattura.value ? '#ec3013' : 'rgba(32,30,29,.4)',
+            fatturaBg: fattura.value ? '#fbeae7' : '#eae9e9',
+            fatturaBox: fattura.value ? '#ec3013' : 'transparent',
+            fatturaMark: fattura.value ? '✓' : '',
+            deltaFatturaTxt: '€ 3.000',
+            toggleFattura: () => { fattura.value = !fattura.value; },
+            
+            // Cantieri List
+            cantieri: cantieri.value,
+            
+            // Squadra
+            operai: operai.value,
+            costoManodoperaTxt: '€ ' + operai.value.reduce((acc, o) => acc + (o.ore * 25), 0) + ',00',
+            
+            // Materiali
+            materiali: materiali.value,
+            
+        }));
+
+        return { vals, nota };
+    },
+    template: `
+<div v-if="vals.isOggi">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#f3f2f2;padding:62px 20px 12px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
+<div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55)">Venerdì 18 settembre</div>
+<div style="font:800 30px/1.05 Archivo;letter-spacing:-.02em;margin-top:2px">Oggi</div>
+</div>
+<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid rgba(32,30,29,.4);font:600 10px Archivo;letter-spacing:.06em;text-transform:uppercase;color:rgba(32,30,29,.6)">
+<span style="width:7px;height:7px;background:#ec3013;display:block"></span>Sincr. 2 min fa</div>
+</div>
+</div>
+
+<div style="padding:0 20px 24px">
+<div style="display:flex;border-bottom:2px solid rgba(32,30,29,.4)">
+<div style="flex:1;padding:14px 0"><div style="font:800 26px/1 Archivo;letter-spacing:-.02em">3</div><div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:4px">Cantieri aperti</div></div>
+<div style="flex:1;padding:14px 0 14px 16px;border-left:1px solid rgba(32,30,29,.2)"><div style="font:800 26px/1 Archivo;letter-spacing:-.02em">€ 9.240</div><div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:4px">Margine maturato</div></div>
+<div style="flex:1;padding:14px 0 14px 16px;border-left:1px solid rgba(32,30,29,.2)"><div style="font:800 26px/1 Archivo;letter-spacing:-.02em;color:#ae1800">2</div><div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:4px">Scadenze ≤30gg</div></div>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;background:#ec3013;color:#f3f2f2;padding:12px 14px;margin-top:16px">
+<span style="font:800 24px/1 Archivo">!</span>
+<div style="flex:1"><div style="font:800 13px/1.2 Archivo">DURC in scadenza il 5 ottobre</div><div style="font:400 11px/1.3 Archivo;opacity:.85;margin-top:2px">15 giorni · blocca gli incassi da pubblico</div></div>
+<div style="font:800 11px Archivo;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid #f3f2f2;padding-bottom:1px">Apri</div>
+</div>
+
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:26px 0 10px">Azioni rapide</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:rgba(32,30,29,.4);border:2px solid rgba(32,30,29,.4)">
+<div @click="vals.goSquadra" class="active-btn" style="background:#f3f2f2;padding:16px 14px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+<span style="font:800 18px/1 Archivo;color:#ec3013">⌁</span><span style="font:600 13px Archivo">Ore squadra</span></div>
+<div @click="vals.goCantieri" class="active-btn" style="background:#f3f2f2;padding:16px 14px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+<span style="font:800 18px/1 Archivo;color:#ec3013">▤</span><span style="font:600 13px Archivo">Rapportino</span></div>
+<div @click="vals.goCosti" class="active-btn" style="background:#f3f2f2;padding:16px 14px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+<span style="font:800 18px/1 Archivo;color:#ec3013">◫</span><span style="font:600 13px Archivo">Scansiona DDT</span></div>
+<div @click="vals.goMateriali" class="active-btn" style="background:#f3f2f2;padding:16px 14px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+<span style="font:800 18px/1 Archivo;color:#ec3013">◈</span><span style="font:600 13px Archivo">Materiali</span></div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin:28px 0 10px">
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55)">Cantieri</div>
+<div @click="vals.goCantieri" style="font:600 11px Archivo;color:#ae1800;cursor:pointer">Tutti →</div>
+</div>
+<div v-for="(c, i) in vals.cantieri" :key="i">
+<div @click="c.open" style="border-top:2px solid rgba(32,30,29,.4);padding:14px 0;cursor:pointer">
+<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline">
+<div style="font:800 15px/1.2 Archivo;letter-spacing:-.01em">{{ c.nome }}</div>
+<div style="font:800 15px Archivo;white-space:nowrap" :style="{ color: c.margineColor }">{{ c.margineTxt }}</div>
+</div>
+<div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:3px">{{ c.cliente }} · {{ c.stato }}</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+<div style="flex:1;height:8px;background:rgba(32,30,29,.14)"><div style="height:8px;background:#ec3013" :style="{ width: c.salWidth }"></div></div>
+<div style="font:800 11px Archivo;width:56px;text-align:right">SAL {{ c.salTxt }}</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isCantieri">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#f3f2f2;padding:62px 20px 12px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div style="font:800 30px/1.05 Archivo;letter-spacing:-.02em">Cantieri</div>
+<div style="display:flex;gap:6px;margin-top:12px">
+<div style="padding:7px 11px;background:#201e1d;color:#f3f2f2;font:600 11px Archivo">In corso · 3</div>
+<div style="padding:7px 11px;border:1px solid rgba(32,30,29,.4);font:600 11px Archivo;color:rgba(32,30,29,.7)">Preventivo · 2</div>
+<div style="padding:7px 11px;border:1px solid rgba(32,30,29,.4);font:600 11px Archivo;color:rgba(32,30,29,.7)">Chiusi</div>
+</div>
+</div>
+<div style="padding:0 20px 24px">
+<div v-for="(c, i) in vals.cantieri" :key="i">
+<div @click="c.open" style="border-bottom:2px solid rgba(32,30,29,.4);padding:18px 0;cursor:pointer">
+<div style="font:800 10px Archivo;letter-spacing:.12em;text-transform:uppercase;color:#ae1800">{{ c.stato }}</div>
+<div style="font:800 18px/1.15 Archivo;letter-spacing:-.015em;margin-top:6px">{{ c.nome }}</div>
+<div style="font:400 12px Archivo;color:rgba(32,30,29,.6);margin-top:3px">{{ c.indirizzo }}</div>
+<div style="display:flex;gap:2px;margin-top:14px;background:rgba(32,30,29,.2)">
+<div style="flex:1;background:#f3f2f2;padding:8px 0"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Preventivo</div><div style="font:800 14px Archivo;margin-top:2px">{{ c.preventivoTxt }}</div></div>
+<div style="flex:1;background:#f3f2f2;padding:8px 0 8px 10px"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Costi</div><div style="font:800 14px Archivo;margin-top:2px">{{ c.costiTxt }}</div></div>
+<div style="flex:1;background:#f3f2f2;padding:8px 0 8px 10px"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Margine</div><div style="font:800 14px Archivo;margin-top:2px" :style="{ color: c.margineColor }">{{ c.margineTxt }}</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+<div style="flex:1;height:8px;background:rgba(32,30,29,.14)"><div style="height:8px;background:#ec3013" :style="{ width: c.salWidth }"></div></div>
+<div style="font:800 11px Archivo;width:56px;text-align:right">SAL {{ c.salTxt }}</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isCantiere">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#f3f2f2;padding:62px 20px 12px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div @click="vals.goCantieri" style="font:600 12px Archivo;color:#ae1800;cursor:pointer;margin-bottom:6px">← Cantieri</div>
+<div style="font:800 24px/1.1 Archivo;letter-spacing:-.02em">{{ vals.sel.nome }}</div>
+<div style="font:400 12px Archivo;color:rgba(32,30,29,.6);margin-top:4px">{{ vals.sel.cliente }} · {{ vals.sel.indirizzo }}</div>
+</div>
+<div style="padding:0 20px 24px">
+<div style="padding:18px 0 16px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div style="display:flex;justify-content:space-between;align-items:baseline">
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55)">Avanzamento</div>
+<div style="font:800 34px/1 Archivo;letter-spacing:-.03em">{{ vals.sel.salTxt }}</div>
+</div>
+<div style="height:14px;background:rgba(32,30,29,.14);margin-top:10px"><div style="height:14px;background:#ec3013" :style="{ width: vals.sel.salWidth }"></div></div>
+<div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:8px">Ultimo aggiornamento: {{ vals.sel.ultimoSal }}</div>
+<div @click="vals.startSal" class="active-btn-red" style="margin-top:14px;background:#ec3013;color:#f3f2f2;padding:15px 16px;font:800 14px Archivo;letter-spacing:-.01em;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+<span>Registra avanzamento</span><span>→</span></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:rgba(32,30,29,.2);margin-top:18px">
+<div style="background:#f3f2f2;padding:12px 0"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Preventivo</div><div style="font:800 19px Archivo;margin-top:2px">{{ vals.sel.preventivoTxt }}</div></div>
+<div style="background:#f3f2f2;padding:12px 0 12px 12px"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Costo totale</div><div style="font:800 19px Archivo;margin-top:2px">{{ vals.sel.costiTxt }}</div></div>
+<div style="background:#f3f2f2;padding:12px 0"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Maturato (SAL)</div><div style="font:800 19px Archivo;margin-top:2px">{{ vals.sel.maturatoTxt }}</div></div>
+<div style="background:#f3f2f2;padding:12px 0 12px 12px"><div style="font:400 10px Archivo;color:rgba(32,30,29,.6)">Margine</div><div style="font:800 19px Archivo;margin-top:2px" :style="{ color: vals.sel.margineColor }">{{ vals.sel.margineTxt }}</div></div>
+</div>
+
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:26px 0 8px">Costi registrati</div>
+<div v-for="(v, i) in vals.sel.voci" :key="i">
+<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-top:1px solid rgba(32,30,29,.2);padding:11px 0">
+<div><div style="font:600 13px Archivo">{{ v.descrizione }}</div><div style="font:400 10px Archivo;letter-spacing:.1em;text-transform:uppercase;color:rgba(32,30,29,.55);margin-top:2px">{{ v.tipo }} · {{ v.data }}</div></div>
+<div style="font:800 14px Archivo;white-space:nowrap">{{ v.importoTxt }}</div>
+</div>
+</div>
+
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:26px 0 8px">Foto cantiere</div>
+<div style="display:flex;gap:2px">
+<div style="flex:1;aspect-ratio:1;background:#d7d3d3;display:flex;align-items:flex-end;padding:6px;font:600 9px Archivo;color:#605d5d">15/09</div>
+<div style="flex:1;aspect-ratio:1;background:#bab6b6;display:flex;align-items:flex-end;padding:6px;font:600 9px Archivo;color:#2d2b2b">16/09</div>
+<div style="flex:1;aspect-ratio:1;background:#9b9797;display:flex;align-items:flex-end;padding:6px;font:600 9px Archivo;color:#f8f4f4">17/09</div>
+<div style="flex:1;aspect-ratio:1;border:1px solid rgba(32,30,29,.4);display:flex;align-items:center;justify-content:center;font:800 22px Archivo;color:#ec3013">+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isSal1">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#201e1d;color:#f3f2f2;padding:62px 20px 14px">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div @click="vals.closeSal" style="font:600 12px Archivo;color:#ff9783;cursor:pointer">Annulla</div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;opacity:.6">Passo 1 di 3</div>
+</div>
+<div style="font:800 24px/1.1 Archivo;letter-spacing:-.02em;margin-top:8px">Quanto è avanzato?</div>
+<div style="display:flex;gap:2px;margin-top:12px"><div style="flex:1;height:3px;background:#ec3013"></div><div style="flex:1;height:3px;background:rgba(243,242,242,.25)"></div><div style="flex:1;height:3px;background:rgba(243,242,242,.25)"></div></div>
+</div>
+<div style="padding:24px 20px">
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55)">{{ vals.sel.nome }}</div>
+<div style="display:flex;align-items:flex-end;gap:10px;margin-top:10px">
+<div style="font:800 68px/.85 Archivo;letter-spacing:-.045em">{{ vals.salPct }}</div>
+<div style="font:800 26px/1 Archivo;color:#ec3013;padding-bottom:6px">%</div>
+<div style="flex:1;text-align:right;font:400 11px/1.4 Archivo;color:rgba(32,30,29,.6);padding-bottom:6px">precedente<br><b style="font-weight:800;color:#201e1d">{{ vals.sel.salTxt }}</b></div>
+</div>
+<div style="height:14px;background:rgba(32,30,29,.14);margin-top:14px;position:relative">
+<div style="height:14px;background:rgba(32,30,29,.3);position:absolute;top:0;left:0" :style="{ width: vals.sel.salWidth }"></div>
+<div style="height:14px;background:#ec3013;position:absolute;top:0;left:0" :style="{ width: vals.salWidth }"></div>
+</div>
+<div style="display:flex;gap:2px;margin-top:16px">
+<div @click="vals.decSal" class="active-btn" style="flex:1;height:64px;border:2px solid rgba(32,30,29,.4);display:flex;align-items:center;justify-content:center;font:800 30px/1 Archivo;cursor:pointer">−</div>
+<div @click="vals.incSal" class="active-btn-red" style="flex:1;height:64px;background:#201e1d;color:#f3f2f2;display:flex;align-items:center;justify-content:center;font:800 30px/1 Archivo;cursor:pointer">+</div>
+</div>
+<div style="display:flex;gap:2px;margin-top:2px">
+<div v-for="(ch, i) in vals.salChips" :key="i">
+<div @click="ch.set" style="flex:1;height:44px;border:1px solid rgba(32,30,29,.4);display:flex;align-items:center;justify-content:center;font:600 13px Archivo;cursor:pointer" :style="{ background: ch.bg, color: ch.fg }">{{ ch.label }}</div>
+</div>
+</div>
+
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:28px 0 8px">Lavorazioni completate oggi</div>
+<div v-for="(l, i) in vals.lavorazioni" :key="i">
+<div @click="l.toggle" style="display:flex;align-items:center;gap:12px;border-top:1px solid rgba(32,30,29,.2);padding:13px 0;cursor:pointer;min-height:48px">
+<div style="width:24px;height:24px;flex:none;color:#f3f2f2;display:flex;align-items:center;justify-content:center;font:800 14px Archivo" :style="{ border: '2px solid ' + l.boxBorder, background: l.boxBg }">{{ l.mark }}</div>
+<div style="font:600 14px Archivo;flex:1">{{ l.nome }}</div>
+<div style="font:400 11px Archivo;color:rgba(32,30,29,.55)">{{ l.quota }}</div>
+</div>
+</div>
+</div>
+<div style="padding:0 20px 28px">
+<div @click="vals.toSal2" class="active-btn-red" style="background:#ec3013;color:#f3f2f2;padding:17px 16px;font:800 15px Archivo;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>Avanti · foto</span><span>→</span></div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isSal2">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#201e1d;color:#f3f2f2;padding:62px 20px 14px">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div @click="vals.toSal1" style="font:600 12px Archivo;color:#ff9783;cursor:pointer">← Indietro</div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;opacity:.6">Passo 2 di 3</div>
+</div>
+<div style="font:800 24px/1.1 Archivo;letter-spacing:-.02em;margin-top:8px">Documenta con le foto</div>
+<div style="display:flex;gap:2px;margin-top:12px"><div style="flex:1;height:3px;background:#ec3013"></div><div style="flex:1;height:3px;background:#ec3013"></div><div style="flex:1;height:3px;background:rgba(243,242,242,.25)"></div></div>
+</div>
+<div style="padding:20px 20px 0">
+<div @click="vals.addFoto" class="active-btn" style="height:190px;border:2px solid #201e1d;background:#eae9e9;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;padding:16px;cursor:pointer">
+<div style="font:800 28px/1 Archivo;color:#ec3013">◉</div>
+<div style="font:800 17px Archivo;margin-top:10px">Scatta foto</div>
+<div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:2px">Geolocalizzata e timbrata sul cantiere</div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 8px">
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55)">Allegate · {{ vals.fotoCount }}</div>
+<div style="font:400 11px Archivo;color:rgba(32,30,29,.55)">{{ vals.fotoStato }}</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px">
+<div v-for="(f, i) in vals.foto" :key="i">
+<div style="aspect-ratio:1;display:flex;flex-direction:column;justify-content:space-between;padding:7px" :style="{ background: f.bg }">
+<div style="font:800 9px Archivo;letter-spacing:.1em" :style="{ color: f.fg }">{{ f.tag }}</div>
+<div style="font:600 9px Archivo" :style="{ color: f.fg }">{{ f.ora }}</div>
+</div>
+</div>
+</div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:24px 0 8px">Nota per il cliente</div>
+<textarea v-model="nota" placeholder="Es. Completata posa massetto piano primo; in attesa consegna serramenti." style="width:100%;min-height:84px;padding:12px;font:400 14px/1.45 Archivo;color:#201e1d;background:#eae9e9;border:1px solid rgba(32,30,29,.4);resize:none;box-sizing:border-box"></textarea>
+</div>
+<div style="padding:20px 20px 28px">
+<div @click="vals.toSal3" class="active-btn-red" style="background:#ec3013;color:#f3f2f2;padding:17px 16px;font:800 15px Archivo;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>Avanti · riepilogo</span><span>→</span></div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isSal3">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#201e1d;color:#f3f2f2;padding:62px 20px 14px">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div @click="vals.toSal2" style="font:600 12px Archivo;color:#ff9783;cursor:pointer">← Indietro</div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;opacity:.6">Passo 3 di 3</div>
+</div>
+<div style="font:800 24px/1.1 Archivo;letter-spacing:-.02em;margin-top:8px">Conferma e fattura</div>
+<div style="display:flex;gap:2px;margin-top:12px"><div style="flex:1;height:3px;background:#ec3013"></div><div style="flex:1;height:3px;background:#ec3013"></div><div style="flex:1;height:3px;background:#ec3013"></div></div>
+</div>
+<div style="padding:22px 20px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid rgba(32,30,29,.4);padding-bottom:14px">
+<div><div style="font:400 11px Archivo;color:rgba(32,30,29,.6)">SAL</div><div style="font:800 22px Archivo;letter-spacing:-.02em">{{ vals.sel.salTxt }} → <span style="color:#ec3013">{{ vals.salPct }}%</span></div></div>
+<div style="text-align:right"><div style="font:400 11px Archivo;color:rgba(32,30,29,.6)">Nuovo maturato</div><div style="font:800 22px Archivo;letter-spacing:-.02em">{{ vals.nuovoMaturatoTxt }}</div></div>
+</div>
+<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:400 13px Archivo;color:rgba(32,30,29,.7)">Costi a oggi</span><span style="font:800 13px Archivo">{{ vals.sel.costiTxt }}</span></div>
+<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:400 13px Archivo;color:rgba(32,30,29,.7)">Margine dopo l'avanzamento</span><span style="font:800 13px Archivo" :style="{ color: vals.nuovoMargineColor }">{{ vals.nuovoMargineTxt }}</span></div>
+<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:400 13px Archivo;color:rgba(32,30,29,.7)">Foto allegate</span><span style="font:800 13px Archivo">{{ vals.fotoCount }}</span></div>
+<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:400 13px Archivo;color:rgba(32,30,29,.7)">Lavorazioni spuntate</span><span style="font:800 13px Archivo">{{ vals.lavCount }}</span></div>
+
+<div @click="vals.toggleFattura" style="display:flex;gap:12px;align-items:flex-start;padding:14px;margin-top:18px;cursor:pointer" :style="{ border: '2px solid ' + vals.fatturaBorder, background: vals.fatturaBg }">
+<div style="width:24px;height:24px;flex:none;color:#f3f2f2;display:flex;align-items:center;justify-content:center;font:800 14px Archivo" :style="{ border: '2px solid ' + vals.fatturaBorder, background: vals.fatturaBox }">{{ vals.fatturaMark }}</div>
+<div><div style="font:800 14px Archivo">Prepara fattura SAL</div><div style="font:400 11px/1.4 Archivo;color:rgba(32,30,29,.65);margin-top:3px">Bozza n. 2026/015 da {{ vals.deltaFatturaTxt }} — la trovi in Costi → Fatture, da confermare in ufficio.</div></div>
+</div>
+</div>
+<div style="padding:0 20px 28px">
+<div @click="vals.confirmSal" class="active-btn-red" style="background:#ec3013;color:#f3f2f2;padding:17px 16px;font:800 15px Archivo;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>Conferma avanzamento</span><span>✓</span></div>
+<div @click="vals.closeSal" style="text-align:left;padding:14px 2px 0;font:600 12px Archivo;color:rgba(32,30,29,.55);cursor:pointer">Annulla</div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isSalOk">
+<div style="min-height:100vh;background:#ec3013;color:#f3f2f2;display:flex;flex-direction:column;justify-content:space-between;padding:120px 22px 40px;box-sizing:border-box">
+<div>
+<div style="font:800 64px/1 Archivo">✓</div>
+<div style="font:800 34px/1.05 Archivo;letter-spacing:-.03em;margin-top:18px">Avanzamento<br>registrato</div>
+<div style="font:400 14px/1.55 Archivo;opacity:.9;margin-top:14px;max-width:280px">{{ vals.sel.nome }} è ora al {{ vals.salPct }}%. {{ vals.fotoCount }} foto caricate, bozza fattura pronta in ufficio.</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:22px;font:600 11px Archivo;letter-spacing:.06em;text-transform:uppercase;opacity:.85"><span style="width:7px;height:7px;background:#f3f2f2;display:block"></span>Sincronizzato ora</div>
+</div>
+<div>
+<div @click="vals.backToCantiere" style="background:#f3f2f2;color:#201e1d;padding:17px 16px;font:800 15px Archivo;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>Torna al cantiere</span><span>→</span></div>
+<div @click="vals.goOggi" style="padding:14px 2px 0;font:600 12px Archivo;opacity:.85;cursor:pointer">Vai a Oggi</div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isSquadra">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#f3f2f2;padding:62px 20px 12px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div style="font:800 30px/1.05 Archivo;letter-spacing:-.02em">Squadra</div>
+<div style="font:400 12px Archivo;color:rgba(32,30,29,.6);margin-top:4px">Venerdì 18 settembre · ore da confermare</div>
+</div>
+<div style="padding:4px 20px 24px">
+<div v-for="(o, i) in vals.operai" :key="i">
+<div style="border-bottom:2px solid rgba(32,30,29,.4);padding:16px 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline">
+<div><div style="font:800 17px/1.1 Archivo;letter-spacing:-.01em">{{ o.nome }}</div><div style="font:400 11px Archivo;color:rgba(32,30,29,.6);margin-top:3px">{{ o.costoTxt }} · {{ o.cantiere }}</div></div>
+<div style="font:800 17px Archivo">{{ o.costoGiornoTxt }}</div>
+</div>
+<div style="display:flex;align-items:center;gap:2px;margin-top:12px">
+<div @click="o.dec" class="active-btn" style="width:56px;height:52px;border:2px solid rgba(32,30,29,.4);display:flex;align-items:center;justify-content:center;font:800 24px Archivo;cursor:pointer">−</div>
+<div style="flex:1;height:52px;background:#eae9e9;display:flex;align-items:center;justify-content:center;font:800 20px Archivo">{{ o.oreTxt }}</div>
+<div @click="o.inc" class="active-btn-red" style="width:56px;height:52px;background:#201e1d;color:#f3f2f2;display:flex;align-items:center;justify-content:center;font:800 24px Archivo;cursor:pointer">+</div>
+</div>
+</div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 0">
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55)">Costo manodopera oggi</div>
+<div style="font:800 24px Archivo;letter-spacing:-.02em">{{ vals.costoManodoperaTxt }}</div>
+</div>
+<div @click="vals.goOggi" class="active-btn-red" style="background:#ec3013;color:#f3f2f2;padding:16px;font:800 14px Archivo;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>Conferma ore e chiudi giornata</span><span>✓</span></div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:28px 0 8px">Scadenze personale e mezzi</div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:600 13px Archivo">DURC impresa</span><span style="font:800 12px Archivo;color:#ae1800">05/10 · 15gg</span></div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:600 13px Archivo">Idoneità sanitaria — M. Rossi</span><span style="font:800 12px Archivo;color:#ae1800">15/11 · 56gg</span></div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(32,30,29,.2);padding:12px 0"><span style="font:600 13px Archivo">Revisione furgone</span><span style="font:800 12px Archivo;color:rgba(32,30,29,.6)">01/03/27</span></div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isCosti">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#f3f2f2;padding:62px 20px 12px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div style="font:800 30px/1.05 Archivo;letter-spacing:-.02em">Costi</div>
+<div style="display:flex;gap:6px;margin-top:12px">
+<div style="padding:7px 11px;background:#201e1d;color:#f3f2f2;font:600 11px Archivo">Per cantiere</div>
+<div style="padding:7px 11px;border:1px solid rgba(32,30,29,.4);font:600 11px Archivo;color:rgba(32,30,29,.7)">DDT</div>
+<div style="padding:7px 11px;border:1px solid rgba(32,30,29,.4);font:600 11px Archivo;color:rgba(32,30,29,.7)">Fatture</div>
+</div>
+</div>
+<div style="padding:18px 20px 24px">
+<div @click="vals.goCosti" class="active-btn" style="display:flex;align-items:center;gap:14px;border:2px solid #201e1d;padding:14px;cursor:pointer">
+<span style="font:800 24px/1 Archivo;color:#ec3013">◫</span>
+<div style="flex:1"><div style="font:800 14px Archivo">Scansiona DDT o fattura</div><div style="font:400 11px Archivo;color:rgba(32,30,29,.65);margin-top:2px">Riconosce fornitore e importo, chiede solo il cantiere</div></div>
+<span style="font:800 16px Archivo">→</span>
+</div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:26px 0 10px">Budget per cantiere</div>
+<div v-for="(c, i) in vals.cantieri" :key="i">
+<div @click="c.open" style="border-top:2px solid rgba(32,30,29,.4);padding:14px 0;cursor:pointer">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:800 14px Archivo">{{ c.nome }}</div><div style="font:600 11px Archivo;color:rgba(32,30,29,.6)">{{ c.costiTxt }} / {{ c.preventivoTxt }}</div></div>
+<div style="display:flex;height:10px;margin-top:10px;background:rgba(32,30,29,.14)"><div style="height:10px;background:#201e1d" :style="{ width: c.costWidth }"></div><div style="height:10px;background:#ec3013" :style="{ width: c.salWidth2 }"></div></div>
+<div style="font:400 10px Archivo;color:rgba(32,30,29,.55);margin-top:6px">nero = costi sostenuti · rosso = quota maturata oltre i costi</div>
+</div>
+</div>
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:26px 0 8px">Ultimi documenti</div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(32,30,29,.2);padding:12px 0"><div><div style="font:600 13px Archivo">DDT 4471 · Edilfer</div><div style="font:400 10px Archivo;color:rgba(32,30,29,.55);margin-top:2px">Ferro sagomato · Via Roma 12</div></div><span style="font:800 13px Archivo">€ 860,00</span></div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(32,30,29,.2);padding:12px 0"><div><div style="font:600 13px Archivo">Fattura 2026/014</div><div style="font:400 10px Archivo;color:rgba(32,30,29,.55);margin-top:2px">Emessa 18/09 · da incassare</div></div><span style="font:800 13px Archivo;color:#ae1800">€ 10.000</span></div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(32,30,29,.2);border-bottom:1px solid rgba(32,30,29,.2);padding:12px 0"><div><div style="font:600 13px Archivo">Noleggio ponteggio</div><div style="font:400 10px Archivo;color:rgba(32,30,29,.55);margin-top:2px">Settimana 38 · Via Roma 12</div></div><span style="font:800 13px Archivo">€ 350,00</span></div>
+</div>
+</div>
+</div>
+
+<div v-if="vals.isMateriali">
+<div>
+<div style="position:sticky;top:0;z-index:3;background:#f3f2f2;padding:62px 20px 12px;border-bottom:2px solid rgba(32,30,29,.4)">
+<div @click="vals.goOggi" style="font:600 12px Archivo;color:#ae1800;cursor:pointer;margin-bottom:6px">← Oggi</div>
+<div style="font:800 30px/1.05 Archivo;letter-spacing:-.02em">Materiali Acquistati</div>
+<div style="display:flex;gap:6px;margin-top:12px">
+<div style="padding:7px 11px;background:#201e1d;color:#f3f2f2;font:600 11px Archivo">Ultimi 30 gg</div>
+<div style="padding:7px 11px;border:1px solid rgba(32,30,29,.4);font:600 11px Archivo;color:rgba(32,30,29,.7)">Per Cantiere</div>
+<div style="padding:7px 11px;border:1px solid rgba(32,30,29,.4);font:600 11px Archivo;color:rgba(32,30,29,.7)">Fornitori</div>
+</div>
+</div>
+<div style="padding:0 20px 24px">
+<div class="active-btn" style="display:flex;align-items:center;gap:14px;border:2px solid #201e1d;padding:14px;margin-top:18px;cursor:pointer">
+<span style="font:800 24px/1 Archivo;color:#ec3013">+</span>
+<div style="flex:1"><div style="font:800 14px Archivo">Registra nuovo acquisto</div><div style="font:400 11px Archivo;color:rgba(32,30,29,.65);margin-top:2px">Inserisci manualmente o da foto scontrino</div></div>
+</div>
+
+<div style="font:800 10px Archivo;letter-spacing:.14em;text-transform:uppercase;color:rgba(32,30,29,.55);margin:26px 0 8px">Ultimi Acquisti</div>
+
+<div v-for="(m, i) in vals.materiali" :key="i">
+<div style="border-bottom:2px solid rgba(32,30,29,.4);padding:16px 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline">
+<div style="font:800 16px/1.1 Archivo;letter-spacing:-.01em">{{ m.nome }}</div>
+<div style="font:800 16px Archivo;white-space:nowrap">{{ m.costoTxt }}</div>
+</div>
+<div style="font:400 12px Archivo;color:rgba(32,30,29,.6);margin-top:4px">{{ m.quantita }} · {{ m.fornitore }}</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+<div style="font:600 11px Archivo;background:rgba(32,30,29,.1);padding:4px 8px">{{ m.cantiere }}</div>
+<div style="font:400 11px Archivo;color:rgba(32,30,29,.55)">{{ m.data }}</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+`
+});
+
+app.mount('#app');
+</script>
+</body>
+</html>
